@@ -432,3 +432,82 @@ Therefore, you will provision a PKI Infrastructure using cfssl which will have a
 Self-Signed Root Certificate Authority (CA)
 
 Here, you will provision a CA that will be used to sign additional TLS certificates.
+
+Create a directory and cd into it:
+
+`mkdir ca-authority && cd ca-authority`
+
+Generate the CA configuration file, Root Certificate, and Private key:
+
+`{
+
+cat > ca-config.json <<EOF
+{
+  "signing": {
+    "default": {
+      "expiry": "8760h"
+    },
+    "profiles": {
+      "kubernetes": {
+        "usages": ["signing", "key encipherment", "server auth", "client auth"],
+        "expiry": "8760h"
+      }
+    }
+  }
+}
+EOF
+
+cat > ca-csr.json <<EOF
+{
+  "CN": "Kubernetes",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "UK",
+      "L": "England",
+      "O": "Kubernetes",
+      "OU": "DAREY.IO DEVOPS",
+      "ST": "London"
+    }
+  ]
+}
+EOF
+
+cfssl gencert -initca ca-csr.json | cfssljson -bare ca
+
+}`
+
+[Output](./images/output.PNG)
+
+List the directory to see the created files:
+
+`ls -ltr`
+
+[Compute 1](./images/root-prvkey-config.PNG)
+
+The 3 important files here are:
+
+ca.pem – The Root Certificate
+ca-key.pem – The Private Key
+ca.csr – The Certificate Signing Request
+Generating TLS Certificates For Client and Server
+
+You will need to provision Client/Server certificates for all the components. It is a MUST to have encrypted communication within the cluster. Therefore, the server here are the master nodes running the api-server component. While the client is every other component that needs to communicate with the api-server.
+
+Now we have a certificate for the Root CA, we can then begin to request more certificates which the different Kubernetes components, i.e. clients and server, will use to have encrypted communication.
+
+Remember, the clients here refer to every other component that will communicate with the api-server. These are:
+
+kube-controller-manager
+kube-scheduler
+etcd
+kubelet
+kube-proxy
+Kubernetes Admin User
+Let us begin with the Kubernetes API-Server Certificate and Private Key
+
+The certificate for the Api-server must have IP addresses, DNS names, and a Load Balancer address included. Otherwise, you will have a lot of difficulties connecting to the api-server.
+
