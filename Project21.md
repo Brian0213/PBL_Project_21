@@ -225,5 +225,118 @@ Route Tables
 
 [Route Tables](./images/aws-rtb-output.PNG)
 
+SECURITY GROUPS
+
+13. Configure security groups:
+
+# Create the security group and store its ID in a variable
+
+`SECURITY_GROUP_ID=$(aws ec2 create-security-group \
+  --group-name ${k8s-cluster-from-ground-up} \
+  --description "Kubernetes cluster security group" \
+  --vpc-id vpc-00cb9af694545376e \
+  --output text --query 'GroupId')`
+
+# Create the NAME tag for the security group
+
+`aws ec2 create-tags \
+  --resources sg-03892885a0637b5f3 \
+  --tags Key=Name,Value=${k8s-cluster-from-ground-up}`
+
+# Create Inbound traffic for all communication within the subnet to connect on ports used by the master node(s)
+
+`aws ec2 authorize-security-group-ingress \
+    --group-id sg-03892885a0637b5f3 \
+    --ip-permissions IpProtocol=tcp,FromPort=2379,ToPort=2380,IpRanges='[{CidrIp=172.31.0.0/24}]'`
+
+# Create Inbound traffic for all communication within the subnet to connect on ports used by the worker nodes
+
+`aws ec2 authorize-security-group-ingress \
+    --group-id sg-03892885a0637b5f3 \
+    --ip-permissions IpProtocol=tcp,FromPort=30000,ToPort=32767,IpRanges='[{CidrIp=172.31.0.0/24}]'`
+
+# Create inbound traffic to allow connections to the Kubernetes API Server listening on port 6443
+
+`aws ec2 authorize-security-group-ingress \
+  --group-id sg-03892885a0637b5f3 \
+  --protocol tcp \
+  --port 6443 \
+  --cidr 0.0.0.0/0`
+
+# Create Inbound traffic for SSH from anywhere (Do not do this in production. Limit access ONLY to IPs or CIDR that MUST connect)
+
+`aws ec2 authorize-security-group-ingress \
+  --group-id sg-03892885a0637b5f3 \
+  --protocol tcp \
+  --port 22 \
+  --cidr 0.0.0.0/0`
+
+# Create ICMP ingress for all types
+
+`aws ec2 authorize-security-group-ingress \
+  --group-id sg-03892885a0637b5f3 \
+  --protocol icmp \
+  --port -1 \
+  --cidr 0.0.0.0/0`
+
+[Security Group](./images/aws-secgrp1.PNG)
+
+[Security Group](./images/aws-secgrp2.PNG)
+
+Network Load Balancer
+
+14. Create a network Load balancer:
+
+`LOAD_BALANCER_ARN=$(aws elbv2 create-load-balancer \
+--name ${k8s-cluster-from-ground-up} \
+--subnets subnet-0b34a94fac58256fc \
+--scheme internet-facing \
+--type network \
+--output text --query 'LoadBalancers[].LoadBalancerArn')`
+
+[Load Balancer](./images/aws-loadbalan.PNG)
+
+Tagret Group
+
+15. Create a target group: (For now it will be unhealthy because there are no real targets yet.)
+
+`TARGET_GROUP_ARN=$(aws elbv2 create-target-group \
+  --name ${k8s-cluster-from-ground-up} \
+  --protocol TCP \
+  --port 6443 \
+  --vpc-id vpc-00cb9af694545376e \
+  --target-type ip \
+  --output text --query 'TargetGroups[].TargetGroupArn')`
+
+[Target Group](./images/aws-targrp.PNG)
+
+16. Register targets: (Just like above, no real targets. You will just put the IP addresses so that, when the nodes become available, they will be used as targets.)
+
+`aws elbv2 register-targets \
+  --target-group-arn ${TARGET_GROUP_ARN} \
+  --targets Id=172.31.0.1{0,1,2}`
+
+17. Create a listener to listen for requests and forward to the target nodes on TCP port 6443:
+
+`aws elbv2 create-listener \
+--load-balancer-arn ${LOAD_BALANCER_ARN} \
+--protocol TCP \
+--port 6443 \
+--default-actions Type=forward,TargetGroupArn=${TARGET_GROUP_ARN} \
+--output text --query 'Listeners[].ListenerArn'`
+
+[Target Group](./images/lister-cli.PNG)
+
+[Target Group](./images/targrp-loadbalan-asso.PNG)
+
+K8s Public Address
+
+18. Get the Kubernetes Public address:
+
+`KUBERNETES_PUBLIC_ADDRESS=$(aws elbv2 describe-load-balancers \
+--load-balancer-arns ${LOAD_BALANCER_ARN} \
+--output text --query 'LoadBalancers[].DNSName')`
+
+
 
 
