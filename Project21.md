@@ -137,7 +137,7 @@ AWS Region
 
 6. Set the required region:
 
-`AWS_REGION=eu-central-1`
+`AWS_REGION=eu-west-1`
 
 Dynamic Host Configuration Protocol – DHCP
 
@@ -338,5 +338,97 @@ K8s Public Address
 --output text --query 'LoadBalancers[].DNSName')`
 
 
+Step 2 – Create Compute Resources
+AMI
 
+1. Get an image to create EC2 instances:
 
+`IMAGE_ID=$(aws ec2 describe-images --owners 099720109477 \
+  --filters \
+  'Name=root-device-type,Values=ebs' \
+  'Name=architecture,Values=x86_64' \
+  'Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-*' \
+  | jq -r '.Images|sort_by(.Name)[-1]|.ImageId')`
+
+`echo $IMAGE_ID`
+
+[AMI Image](./images/ami-image.PNG)
+
+[Compute 1](./images/step2.1.output.PNG)
+
+SSH key-pair
+
+2. Create SSH Key-Pair:
+
+`mkdir -p ssh`
+
+`aws ec2 create-key-pair \ --key-name ${k8s-cluster-from-ground-up} \ --output text --query 'KeyMaterial' \ > ssh/${k8s-cluster-from-ground-up}.id_rsa
+chmod 600 ssh/${k8s-cluster-from-ground-up}.id_rsa`
+
+[SSH Create](./images/ssh-keypair-output.PNG)
+
+EC2 Instances for Controle Plane (Master Nodes)
+
+3. Create 3 Master nodes: Note – Using t2.micro instead of t2.small as t2.micro is covered by AWS free tier:
+
+for i in 0 1 2; do
+  instance_id=$(aws ec2 run-instances \
+    --associate-public-ip-address \
+    --image-id ami-0f29c8402f8cce65c \
+    --count 1 \
+    --key-name ${NAME} \
+    --security-group-ids sg-03892885a0637b5f3 \
+    --instance-type t2.micro \
+    --private-ip-address 172.31.0.1${i} \
+    --user-data "name=master-${i}" \
+    --subnet-id subnet-0b34a94fac58256fc \
+    --output text --query 'Instances[].InstanceId')
+  aws ec2 modify-instance-attribute \
+    --instance-id ${instance_id} \
+    --no-source-dest-check
+  aws ec2 create-tags \
+    --resources ${instance_id} \
+    --tags "Key=Name,Value=${k8s-cluster-from-ground-up}-master-${i}"
+ done
+
+EC2 Instances for Worker Nodes
+
+1. Create 3 worker nodes:
+
+for i in 0 1 2; do
+  instance_id=$(aws ec2 run-instances \
+    --associate-public-ip-address \
+    --image-id ami-0f29c8402f8cce65c \
+    --count 1 \
+    --key-name ${NAME} \
+    --security-group-ids sg-03892885a0637b5f3 \
+    --instance-type t2.micro \
+    --private-ip-address 172.31.0.2${i} \
+    --user-data "name=worker-${i}|pod-cidr=172.20.${i}.0/24" \
+    --subnet-id subnet-0b34a94fac58256fc \
+    --output text --query 'Instances[].InstanceId')
+  aws ec2 modify-instance-attribute \
+    --instance-id ${instance_id} \
+    --no-source-dest-check
+  aws ec2 create-tags \
+    --resources ${instance_id} \
+    --tags "Key=Name,Value=${k8s-cluster-from-ground-up}-worker-${i}"
+done
+
+STEP 3 PREPARE THE SELF-SIGNED CERTIFICATE AUTHORITY AND GENERATE TLS CERTIFICATES
+Step 3 Prepare The Self-Signed Certificate Authority And Generate TLS Certificates
+The following components running on the Master node will require TLS certificates.
+
+kube-controller-manager
+kube-scheduler
+etcd
+kube-apiserver
+The following components running on the Worker nodes will require TLS certificates.
+
+kubelet
+kube-proxy
+Therefore, you will provision a PKI Infrastructure using cfssl which will have a Certificate Authority. The CA will then generate certificates for all the individual components.
+
+Self-Signed Root Certificate Authority (CA)
+
+Here, you will provision a CA that will be used to sign additional TLS certificates.
