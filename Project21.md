@@ -152,3 +152,78 @@ By default EC2 instances have fully qualified names like ip-172-50-197-106.eu-ce
     "Key=domain-name,Values=$AWS_REGION.compute.internal" \
     "Key=domain-name-servers,Values=AmazonProvidedDNS" \
   --output text --query 'DhcpOptions.DhcpOptionsId')`
+
+8. Tag the DHCP Option set:
+
+`aws ec2 create-tags \
+  --resources ${DHCP_OPTION_SET_ID} \
+  --tags Key=Name,Value=${k8s-cluster-from-ground-up}`
+
+[VPC Config](./images/dhcp-tag.PNG)
+
+9. Associate the DHCP Option set with the VPC:
+
+`aws ec2 associate-dhcp-options --dhcp-options-id ${DHCP_OPTION_SET_ID} --vpc-id vpc-00cb9af694545376e`
+
+[DHCP Associate VPC](./images/dhcp-associate-vpc.PNG)
+
+SUBNET
+
+10. Create the Subnet:
+
+`SUBNET_ID=$(aws ec2 create-subnet \
+  --vpc-id vpc-00cb9af694545376e \
+  --cidr-block 172.31.0.0/24 \
+  --output text --query 'Subnet.SubnetId')`
+
+`aws ec2 create-tags \
+  --resources ${SUBNET_ID} \
+  --tags Key=Name,Value=${k8s-cluster-from-ground-up}`
+
+[Subnet VPC](./images/subnet-vpc.PNG)
+
+Internet Gateway – IGW
+
+11. Create the Internet Gateway and attach it to the VPC:
+
+`INTERNET_GATEWAY_ID=$(aws ec2 create-internet-gateway \
+  --output text --query 'InternetGateway.InternetGatewayId')
+aws ec2 create-tags \
+  --resources ${INTERNET_GATEWAY_ID} \
+  --tags Key=Name,Value=${k8s-cluster-from-ground-up}`
+
+`aws ec2 attach-internet-gateway \
+  --internet-gateway-id ${INTERNET_GATEWAY_ID} \
+  --vpc-id vpc-00cb9af694545376e`
+
+[Internet Gateway](./images/igw-config.PNG)
+
+Route Tables
+
+12. Create route tables, associate the route table to subnet, and create a route to allow external traffic to the Internet through the Internet Gateway:
+
+`ROUTE_TABLE_ID=$(aws ec2 create-route-table \
+  --vpc-id vpc-00cb9af694545376e \
+  --output text --query 'RouteTable.RouteTableId')`
+
+`aws ec2 create-tags \
+  --resources ${ROUTE_TABLE_ID} \
+  --tags Key=Name,Value=${k8s-cluster-from-ground-up}`
+
+`aws ec2 associate-route-table \
+  --route-table-id ${ROUTE_TABLE_ID} \
+  --subnet-id subnet-0b34a94fac58256fc`
+
+`aws ec2 create-route \
+  --route-table-id ${ROUTE_TABLE_ID} \
+  --destination-cidr-block 0.0.0.0/0 \
+  --gateway-id igw-08459e721f03a7ae6`
+
+[Route Tables](./images/rtb-config1.PNG)
+
+[Route Tables](./images/rtb-config2.PNG)
+
+[Route Tables](./images/aws-rtb-output.PNG)
+
+
+
