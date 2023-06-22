@@ -1073,7 +1073,7 @@ ssh -i k8s-cluster-from-ground-up.id_rsa ubuntu@${master_2_ip}`
 
 You should have a a similar pane like below. You should be able to see all the files that have been sent to the nodes.
 
-2. Download and install etcd:
+2. Download and install etcd in all the 3 Master Nodes/Instances:
 
 `wget -q --show-progress --https-only --timestamping \
   "https://github.com/etcd-io/etcd/releases/download/v3.4.15/etcd-v3.4.15-linux-amd64.tar.gz"}`
@@ -1153,3 +1153,24 @@ WantedBy=multi-user.target
 EOF`
 
 [ETCD Service](./images/etcd-service.PNG)
+
+8. Start and enable the etcd Server:
+
+`{
+sudo systemctl daemon-reload
+sudo systemctl enable etcd
+sudo systemctl start etcd
+}`
+
+[ETCD Start & Enable](./images/etcd-star-enab.PNG)
+
+9. Verify the etcd installation:
+
+`sudo ETCDCTL_API=3 etcdctl member list \
+  --endpoints=https://127.0.0.1:2379 \
+  --cacert=/etc/etcd/ca.pem \
+  --cert=/etc/etcd/master-kubernetes.pem \
+  --key=/etc/etcd/master-kubernetes-key.pem`
+
+[ETCD Start & Enable](./images/etcd-star-enab.PNG)
+
