@@ -830,3 +830,326 @@ done`
 [Master or Controller node](./images/mast-cont-2.PNG)
 
 The kube-proxy, kube-controller-manager, kube-scheduler, and kubelet client certificates will be used to generate client authentication configuration files later.
+
+STEP 5 USE `KUBECTL` TO GENERATE KUBERNETES CONFIGURATION FILES FOR AUTHENTICATION
+All the work you are doing right now is ensuring that you do not face any difficulties by the time the Kubernetes cluster is up and running. In this step, you will create some files known as kubeconfig, which enables Kubernetes clients to locate and authenticate to the Kubernetes API Servers.
+
+You will need a client tool called kubectl to do this. And, by the way, most of your time with Kubernetes will be spent using kubectl commands.
+
+Now it’s time to generate kubeconfig files for the kubelet, controller manager, kube-proxy, and scheduler clients and then the admin user.
+
+First, let us create a few environment variables for reuse by multiple commands.
+
+`KUBERNETES_API_SERVER_ADDRESS=$(aws elbv2 describe-load-balancers --load-balancer-arns ${LOAD_BALANCER_ARN} --output text --query 'LoadBalancers[].DNSName')`
+
+[KUBERNETES_API_SERVER_ADDRESS](./images/kuber-api-server.PNG)
+
+1. Generate the kubelet kubeconfig file
+For each of the nodes running the kubelet component, it is very important that the client certificate configured for that node is used to generate the kubeconfig. This is because each certificate has the node’s DNS name or IP Address configured at the time the certificate was generated. It will also ensure that the appropriate authorization is applied to that node through the Node Authorizer
+
+Below command must be run in the directory where all the certificates were generated.
+
+`for i in 0 1 2; do
+
+instance="${NAME}-worker-${i}"
+instance_hostname="ip-172-31-0-2${i}"
+
+ # Set the kubernetes cluster in the kubeconfig file
+  kubectl config set-cluster ${NAME} \
+    --certificate-authority=ca.pem \
+    --embed-certs=true \
+    --server=https://$KUBERNETES_API_SERVER_ADDRESS:6443 \
+    --kubeconfig=${instance}.kubeconfig
+
+# Set the cluster credentials in the kubeconfig file
+  kubectl config set-credentials system:node:${instance_hostname} \
+    --client-certificate=${instance}.pem \
+    --client-key=${instance}-key.pem \
+    --embed-certs=true \
+    --kubeconfig=${instance}.kubeconfig
+
+# Set the context in the kubeconfig file
+  kubectl config set-context default \
+    --cluster=${NAME} \
+    --user=system:node:${instance_hostname} \
+    --kubeconfig=${instance}.kubeconfig
+
+  kubectl config use-context default --kubeconfig=${instance}.kubeconfig
+done`
+
+[KUBERNETES_API_SERVER_ADDRESS](./images/kube-kubeconfig-file.PNG)
+
+List the output
+
+`ls -ltr *.kubeconfig`
+
+[List Output](./images/ls-ltr-kubconf.PNG)
+
+Open up the kubeconfig files generated and review the 3 different sections that have been configured:
+
+Cluster
+Credentials
+And Kube Context
+Kubeconfig file is used to organize information about clusters, users, namespaces and authentication mechanisms. By default, kubectl looks for a file named config in the $HOME/.kube directory. You can specify other kubeconfig files by setting the KUBECONFIG environment variable or by setting the --kubeconfig flag. To get to know more how to create your own kubeconfig files – read this documentation.
+
+Context part of kubeconfig file defines three main parameters: cluster, namespace and user. You can save several different contexts with any convenient names and switch between them when needed.
+
+`kubectl config use-context %context-name%`
+
+2. Generate the kube-proxy kubeconfig:
+
+`{
+  kubectl config set-cluster ${NAME} \
+    --certificate-authority=ca.pem \
+    --embed-certs=true \
+    --server=https://${KUBERNETES_API_SERVER_ADDRESS}:6443 \
+    --kubeconfig=kube-proxy.kubeconfig
+
+  kubectl config set-credentials system:kube-proxy \
+    --client-certificate=kube-proxy.pem \
+    --client-key=kube-proxy-key.pem \
+    --embed-certs=true \
+    --kubeconfig=kube-proxy.kubeconfig
+
+  kubectl config set-context default \
+    --cluster=${NAME} \
+    --user=system:kube-proxy \
+    --kubeconfig=kube-proxy.kubeconfig
+
+  kubectl config use-context default --kubeconfig=kube-proxy.kubeconfig
+}`
+
+[kube-proxy kubeconfig](./images/kube-proxy-kubeconfig.PNG)
+
+3. Generate the Kube-Controller-Manager kubeconfig
+
+Notice that the --server is set to use 127.0.0.1. This is because, this component runs on the API-Server so there is no point routing through the Load Balancer.
+
+`{
+  kubectl config set-cluster ${NAME} \
+    --certificate-authority=ca.pem \
+    --embed-certs=true \
+    --server=https://127.0.0.1:6443 \
+    --kubeconfig=kube-controller-manager.kubeconfig
+
+  kubectl config set-credentials system:kube-controller-manager \
+    --client-certificate=kube-controller-manager.pem \
+    --client-key=kube-controller-manager-key.pem \
+    --embed-certs=true \
+    --kubeconfig=kube-controller-manager.kubeconfig
+
+  kubectl config set-context default \
+    --cluster=${NAME} \
+    --user=system:kube-controller-manager \
+    --kubeconfig=kube-controller-manager.kubeconfig
+
+  kubectl config use-context default --kubeconfig=kube-controller-manager.kubeconfig
+}`
+
+[Kube-Controller-Manager](./images/kube-cont-mgr.PNG)
+
+4. Generating the Kube-Scheduler Kubeconfig
+
+`{
+  kubectl config set-cluster ${NAME} \
+    --certificate-authority=ca.pem \
+    --embed-certs=true \
+    --server=https://127.0.0.1:6443 \
+    --kubeconfig=kube-scheduler.kubeconfig
+
+  kubectl config set-credentials system:kube-scheduler \
+    --client-certificate=kube-scheduler.pem \
+    --client-key=kube-scheduler-key.pem \
+    --embed-certs=true \
+    --kubeconfig=kube-scheduler.kubeconfig
+
+  kubectl config set-context default \
+    --cluster=${NAME} \
+    --user=system:kube-scheduler \
+    --kubeconfig=kube-scheduler.kubeconfig
+
+  kubectl config use-context default --kubeconfig=kube-scheduler.kubeconfig
+}`
+
+[Kube-Scheduler Kubeconfig](./images/kube-sche-kubconfg.PNG)
+
+5. Finally, generate the kubeconfig file for the admin user:
+
+`{
+  kubectl config set-cluster ${NAME} \
+    --certificate-authority=ca.pem \
+    --embed-certs=true \
+    --server=https://${KUBERNETES_API_SERVER_ADDRESS}:6443 \
+    --kubeconfig=admin.kubeconfig
+
+  kubectl config set-credentials admin \
+    --client-certificate=admin.pem \
+    --client-key=admin-key.pem \
+    --embed-certs=true \
+    --kubeconfig=admin.kubeconfig
+
+  kubectl config set-context default \
+    --cluster=${NAME} \
+    --user=admin \
+    --kubeconfig=admin.kubeconfig
+
+  kubectl config use-context default --kubeconfig=admin.kubeconfig
+}`
+
+[admin user](./images/admin-user.PNG)
+
+TASK: Distribute the files to their respective servers, using scp and a for loop like we have done previously. This is a test to validate that you understand which component must go to which node.
+
+STEP 6 PREPARE THE ETCD DATABASE FOR ENCRYPTION AT REST.
+Step 6 Prepare the etcd database for encryption at rest.
+Kubernetes uses etcd (A distributed key value store) to store variety of data which includes the cluster state, application configurations, and secrets. By default, the data that is being persisted to the disk is not encrypted. Any attacker that is able to gain access to this database can exploit the cluster since the data is stored in plain text. Hence, it is a security risk for Kubernetes that needs to be addressed.
+
+To mitigate this risk, we must prepare to encrypt etcd at rest. "At rest" means data that is stored and persists on a disk. Anytime you hear "in-flight" or "in transit" refers to data that is being transferred over the network. "In-flight" encryption is done through TLS.
+
+Generate the encryption key and encode it using base64:
+
+`ETCD_ENCRYPTION_KEY=$(head -c 64 /dev/urandom | base64)`
+
+See the output that will be generated when called. Yours will be a different random string.
+
+`echo $ETCD_ENCRYPTION_KEY`
+
+[admin user](./images/encry-key.PNG)
+
+** Create an encryption-config.yaml file as documented officially by kubernetes:
+
+`cat > encryption-config.yaml <<EOF
+kind: EncryptionConfig
+apiVersion: v1
+resources:
+  - resources:
+      - secrets
+    providers:
+      - aescbc:
+          keys:
+            - name: key1
+              secret: ${ETCD_ENCRYPTION_KEY}
+      - identity: {}
+EOF`
+
+Send the encryption file to the Controller nodes using scp and a for loop.
+
+Bootstrap etcd cluster
+TIPS: Use a terminal multi-plexer like multi-tabbed putty or tmux to work with multiple terminal sessions simultaneously. It will make your life easier, especially when you need to work on multiple nodes and run the same command across all nodes. Imagine repeating the same commands on 10 different nodes, and you don not intend to start automating with a configuration management tool like Ansible yet.
+
+The primary purpose of the etcd component is to store the state of the cluster. This is because Kubernetes itself is stateless. Therefore, all its stateful data will persist in etcd. Since Kubernetes is a distributed system – it needs a distributed storage to keep persistent data in it. etcd is a highly-available key value store that fits the purpose. All K8s cluster configurations are stored in a form of key value pairs in etcd, it also stores the actual and desired states of the cluster. etcd cluster is intelligent enough to watch for changes made on one instance and almost instantly replicate those changes to the rest of the instances, so all of them will be always reconciled.
+
+NOTE: Don not just copy and paste the commands, ensure that you go through each and understand exactly what they will do on your servers. Use tools like tmux to make it easy to run commands on multiple terminal screens at once.
+
+cd into the SSH folder before running the command
+
+1. SSH into the controller server
+ Master-1
+
+`master_1_ip=$(aws ec2 describe-instances \
+--filters "Name=tag:Name,Values=${NAME}-master-0" \
+--output text --query 'Reservations[].Instances[].PublicIpAddress')
+ssh -i k8s-cluster-from-ground-up.id_rsa ubuntu@${master_1_ip}`
+
+[Master-1](./images/master-1.PNG)
+
+Master-2
+
+`master_2_ip=$(aws ec2 describe-instances \
+--filters "Name=tag:Name,Values=${NAME}-master-1" \
+--output text --query 'Reservations[].Instances[].PublicIpAddress')
+ssh -i k8s-cluster-from-ground-up.id_rsa ubuntu@${master_2_ip}`
+
+[Master-2](./images/master-2.PNG)
+
+Master-3
+
+`master_2_ip=$(aws ec2 describe-instances \
+--filters "Name=tag:Name,Values=${NAME}-master-1" \
+--output text --query 'Reservations[].Instances[].PublicIpAddress')
+ssh -i k8s-cluster-from-ground-up.id_rsa ubuntu@${master_2_ip}`
+
+[Master-3](./images/master-3.PNG)
+
+You should have a a similar pane like below. You should be able to see all the files that have been sent to the nodes.
+
+2. Download and install etcd:
+
+`wget -q --show-progress --https-only --timestamping \
+  "https://github.com/etcd-io/etcd/releases/download/v3.4.15/etcd-v3.4.15-linux-amd64.tar.gz"}`
+
+[ETCD](./images/etcd-output.PNG)
+
+3. Extract and install the etcd server and the etcdctl command line utility:
+
+`{
+tar -xvf etcd-v3.4.15-linux-amd64.tar.gz
+sudo mv etcd-v3.4.15-linux-amd64/etcd* /usr/local/bin/
+}`
+
+[ETCD Server Command](./images/etcdctl-1.PNG)
+
+[ETCD Server Command](./images/etcdctl-2.PNG)
+
+4. Configure the etcd server:
+
+`{
+  sudo mkdir -p /etc/etcd /var/lib/etcd
+  sudo chmod 700 /var/lib/etcd
+  sudo cp ca.pem master-kubernetes-key.pem master-kubernetes.pem /etc/etcd/
+}`
+
+[ETCD Server Configure](./images/etcd-config.PNG)
+
+5. The instance internal IP address will be used to serve client requests and communicate with etcd cluster peers. Retrieve the internal IP address for the current compute instance:
+
+`export INTERNAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)`
+
+[Internal IP Address](./images/inter-add.PNG)
+
+6. Each etcd member must have a unique name within an etcd cluster. Set the etcd name to node Private IP address so it will uniquely identify the machine:
+
+`ETCD_NAME=$(curl -s http://169.254.169.254/latest/user-data/ \
+  | tr "|" "\n" | grep "^name" | cut -d"=" -f2)
+
+echo ${ETCD_NAME}`
+
+[ETCD Name](./images/etcd-name.PNG)
+
+7. Create the etcd.service systemd unit file:
+
+The flags are well documented here:
+
+`cat <<EOF | sudo tee /etc/systemd/system/etcd.service
+[Unit]
+Description=etcd
+Documentation=https://github.com/coreos
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/etcd \\
+  --name ${ETCD_NAME} \\
+  --trusted-ca-file=/etc/etcd/ca.pem \\
+  --peer-trusted-ca-file=/etc/etcd/ca.pem \\
+  --peer-client-cert-auth \\
+  --client-cert-auth \\
+  --listen-peer-urls https://${INTERNAL_IP}:2380 \\
+  --listen-client-urls https://${INTERNAL_IP}:2379,https://127.0.0.1:2379 \\
+  --advertise-client-urls https://${INTERNAL_IP}:2379 \\
+  --initial-cluster-token etcd-cluster-0 \\
+  --initial-cluster master-0=https://172.31.0.10:2380,master-1=https://172.31.0.11:2380,master-2=https://172.31.0.12:2380 \\
+  --cert-file=/etc/etcd/master-kubernetes.pem \\
+  --key-file=/etc/etcd/master-kubernetes-key.pem \\
+  --peer-cert-file=/etc/etcd/master-kubernetes.pem \\
+  --peer-key-file=/etc/etcd/master-kubernetes-key.pem \\
+  --initial-advertise-peer-urls https://${INTERNAL_IP}:2380 \\
+  --initial-cluster-state new \\
+  --data-dir=/var/lib/etcd
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF`
+
+[ETCD Service](./images/etcd-service.PNG)
