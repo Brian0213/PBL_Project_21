@@ -1890,7 +1890,7 @@ sudo mv kube-proxy.kubeconfig /var/lib/kube-proxy/kubeconfig
 sudo mv ca.pem /var/lib/kubernetes/`
 
 14. Create the kubelet-config.yaml file
-Ensure the needed variables exist:
+Ensure the needed variables exist on the worker instances:
 
 `NAME=k8s-cluster-from-ground-up
 WORKER_NAME=${NAME}-$(curl -s http://169.254.169.254/latest/user-data/ \
@@ -1941,7 +1941,7 @@ nameserver 8.8.8.8
 
 In Kubernetes, the kubelet process on a worker node configures each pod. Part of the configuration process is to create the file /etc/resolv.conf and specify the correct DNS server.
 
-15. Configure the kubelet systemd service:
+15. Configure the kubelet systemd service in the homepage terminal:
 
 `cat <<EOF | sudo tee /etc/systemd/system/kubelet.service
 [Unit]
@@ -1966,7 +1966,7 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF`
 
-16. Create the kube-proxy.yaml file:
+16. Create the kube-proxy.yaml file in the homepage terminal:
 
 `cat <<EOF | sudo tee /var/lib/kube-proxy/kube-proxy-config.yaml
 kind: KubeProxyConfiguration
@@ -1977,7 +1977,7 @@ mode: "iptables"
 clusterCIDR: "172.31.0.0/16"
 EOF`
 
-17. Configure the Kube Proxy systemd service:
+17. Configure the Kube Proxy systemd service in the homepage terminal:
 
 `cat <<EOF | sudo tee /etc/systemd/system/kube-proxy.service
 [Unit]
@@ -1992,7 +1992,7 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF`
 
-18. Reload configurations and start both services:
+18. Reload configurations and start both services on the homepage terminal:
 
 `{
   sudo systemctl daemon-reload
