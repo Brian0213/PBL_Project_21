@@ -2002,7 +2002,21 @@ EOF`
 
 [Configurations and Start Services](./images/config-serv.PNG)
 
+Now you should have the worker nodes joined to the cluster, and in a READY state.
 
+
+
+Troubleshooting Tips: If you have issues at this point. Consider the below:
+
+Use journalctl -u <service name> to get the log output and read what might be wrong with starting up the service. You can redirect the output into a file and analyse it.
+Review your PKI setup again. Ensure that the certificates you generated have the hostnames properly configured.
+It is okay to start all over again. Each time you attempt the solution is an opportunity to learn something.
+Congratulations!
+You have created your first Kubernetes cluster From-Ground-Up! It was not an easy task, but you have learned how different components of K8s work together – it will help you not just in creation your clusters in the real work experience, but also to maintain and troubleshoot them further.
+
+
+
+Proceed to the next exciting PBL projects to practice more Kubernetes and other cool technologies with us!
 
 
 
